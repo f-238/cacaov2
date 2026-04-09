@@ -1,0 +1,14 @@
+.venv
+node_modules
+dist
+.codex-logs
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+celerybeat-schedule*
+*.db
+*.sqlite3
+vscode
