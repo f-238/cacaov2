@@ -5,13 +5,25 @@
         <p class="eyebrow">Trend Analysis</p>
         <h1>Temperature and Moisture Analytics</h1>
         <p class="subtitle">
-          ThingSpeak history is visualized here, with local fallback data before chart-library integration.
+          Backend device history is visualized here for your registered device.
         </p>
       </div>
 
       <div class="summary-pill">
-        {{ totalPoints }} total points
+        {{ summaryText }}
       </div>
+    </div>
+
+    <div v-if="isLoading" class="empty-state">
+      Loading analytics...
+    </div>
+
+    <div v-else-if="noDevice" class="empty-state">
+      No device is registered to your account yet.
+    </div>
+
+    <div v-else-if="loadError" class="empty-state error-state">
+      {{ loadError }}
     </div>
 
     <div class="chart-grid">
@@ -27,12 +39,12 @@
             </span>
             <div>
               <h2>Temperature Trend</h2>
-              <p>Preview using ThingSpeak readings</p>
+              <p>Preview using backend readings</p>
             </div>
           </div>
         </div>
 
-        <div class="mini-chart temperature-chart" aria-label="Temperature trend preview">
+        <div v-if="tempData.length > 0" class="mini-chart temperature-chart" aria-label="Temperature trend preview">
           <div
             v-for="point in tempData"
             :key="`temp-${point.time}`"
@@ -42,6 +54,9 @@
             <span class="bar-value">{{ point.value.toFixed(1) }} °C</span>
             <span class="bar-label">{{ formatShortTime(point.time) }}</span>
           </div>
+        </div>
+        <div v-else class="chart-empty">
+          No temperature readings yet.
         </div>
       </article>
 
@@ -57,12 +72,12 @@
             </span>
             <div>
               <h2>Moisture Trend</h2>
-              <p>Preview using ThingSpeak readings</p>
+              <p>Preview using backend readings</p>
             </div>
           </div>
         </div>
 
-        <div class="mini-chart moisture-chart" aria-label="Moisture trend preview">
+        <div v-if="moistureData.length > 0" class="mini-chart moisture-chart" aria-label="Moisture trend preview">
           <div
             v-for="point in moistureData"
             :key="`moisture-${point.time}`"
@@ -73,64 +88,137 @@
             <span class="bar-label">{{ formatShortTime(point.time) }}</span>
           </div>
         </div>
+        <div v-else class="chart-empty">
+          No moisture readings yet.
+        </div>
       </article>
     </div>
 
     <section class="integration-card">
       <div class="integration-copy">
-        <p class="eyebrow">Future Integration</p>
-        <h2>Chart.js / ApexCharts placeholder</h2>
+        <p class="eyebrow">Chart Library</p>
+        <h2>Interactive Trends</h2>
         <p>
-          This section is reserved for the real charting library. The current layout keeps spacing and hierarchy ready for a future swap.
+          Real chart rendering is now enabled with Chart.js using backend readings.
         </p>
+        <div class="library-switch">
+          <button
+            type="button"
+            class="library-chip"
+            :class="{ active: selectedLibrary === 'Chart.js' }"
+            @click="selectedLibrary = 'Chart.js'"
+          >
+            Chart.js
+          </button>
+          <button
+            type="button"
+            class="library-chip"
+            :class="{ active: selectedLibrary === 'ApexCharts' }"
+            @click="selectedLibrary = 'ApexCharts'"
+          >
+            ApexCharts (Soon)
+          </button>
+        </div>
       </div>
 
-      <div class="integration-preview" aria-label="Chart library placeholder">
-        <div class="preview-grid"></div>
-        <div class="preview-line line-one"></div>
-        <div class="preview-line line-two"></div>
+      <div class="integration-preview" aria-label="Chart library panel">
+        <template v-if="selectedLibrary === 'Chart.js'">
+          <div v-if="hasChartData" class="real-charts">
+            <article class="real-chart-card">
+              <p class="real-chart-title">Temperature and Ambient (Line)</p>
+              <div class="chart-canvas-wrap">
+                <canvas ref="trendCanvas"></canvas>
+              </div>
+            </article>
+
+            <article class="real-chart-card">
+              <p class="real-chart-title">Moisture (Bar)</p>
+              <div class="chart-canvas-wrap">
+                <canvas ref="moistureCanvas"></canvas>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="chart-empty">
+            No data available yet to render Chart.js charts.
+          </div>
+        </template>
+
+        <div v-else class="apex-placeholder">
+          ApexCharts mode is reserved for the next iteration.
+        </div>
       </div>
     </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { fetchHistoricalSensorReadings, toChartSeries, type SensorChartSeries } from '../services/thingspeak'
+import {
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart,
+  type ChartConfiguration,
+  Filler,
+  Legend,
+  LineController,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip
+} from 'chart.js'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { fetchMyDevices } from '../services/devices'
+import { fetchHistoricalDeviceReadings, toChartSeries, type SensorChartSeries } from '../services/readings'
 
 type DataPoint = {
   time: string
   value: number
 }
 
-type AnalyticsData = {
-  temperature: DataPoint[]
-  moisture: DataPoint[]
-}
-
-const seededAnalytics: AnalyticsData = {
-  temperature: [
-    { time: '2026-04-09T08:00:00.000Z', value: 29.8 },
-    { time: '2026-04-09T09:30:00.000Z', value: 30.5 },
-    { time: '2026-04-09T11:00:00.000Z', value: 31.1 },
-    { time: '2026-04-09T12:30:00.000Z', value: 32.0 },
-    { time: '2026-04-09T14:00:00.000Z', value: 31.4 }
-  ],
-  moisture: [
-    { time: '2026-04-09T08:00:00.000Z', value: 13.5 },
-    { time: '2026-04-09T09:30:00.000Z', value: 12.9 },
-    { time: '2026-04-09T11:00:00.000Z', value: 12.2 },
-    { time: '2026-04-09T12:30:00.000Z', value: 11.7 },
-    { time: '2026-04-09T14:00:00.000Z', value: 11.3 }
-  ]
-}
-
 const tempData = ref<DataPoint[]>([])
 const moistureData = ref<DataPoint[]>([])
+const ambientData = ref<DataPoint[]>([])
+const isLoading = ref(true)
+const noDevice = ref(false)
+const loadError = ref('')
+const selectedLibrary = ref<'Chart.js' | 'ApexCharts'>('Chart.js')
+const trendCanvas = ref<HTMLCanvasElement | null>(null)
+const moistureCanvas = ref<HTMLCanvasElement | null>(null)
+let trendChart: Chart | null = null
+let moistureChart: Chart | null = null
+
+Chart.register(
+  LineController,
+  LineElement,
+  PointElement,
+  BarController,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+  Filler
+)
 
 const totalPoints = computed(() => tempData.value.length + moistureData.value.length)
+const hasChartData = computed(() => tempData.value.length > 0 && moistureData.value.length > 0)
+const summaryText = computed(() => {
+  if (isLoading.value) {
+    return 'Loading analytics...'
+  }
+
+  return `${totalPoints.value} total points`
+})
 
 const getRange = (points: DataPoint[]) => {
+  if (points.length === 0) {
+    return {
+      min: 0,
+      max: 1
+    }
+  }
+
   const values = points.map((point) => point.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -153,58 +241,207 @@ const normalizeHeight = (value: number, range: { min: number; max: number }) => 
   return Number(scaled.toFixed(2))
 }
 
-const loadAnalyticsData = () => {
-  const storedAnalytics = localStorage.getItem('analyticsData')
-
-  if (!storedAnalytics) {
-    localStorage.setItem('analyticsData', JSON.stringify(seededAnalytics))
-    tempData.value = seededAnalytics.temperature
-    moistureData.value = seededAnalytics.moisture
-    return
-  }
-
-  try {
-    const parsed = JSON.parse(storedAnalytics) as Partial<AnalyticsData>
-    const hasTemperature = Array.isArray(parsed.temperature)
-    const hasMoisture = Array.isArray(parsed.moisture)
-
-    tempData.value = hasTemperature ? (parsed.temperature as DataPoint[]) : seededAnalytics.temperature
-    moistureData.value = hasMoisture ? (parsed.moisture as DataPoint[]) : seededAnalytics.moisture
-
-    if (!hasTemperature || !hasMoisture) {
-      localStorage.setItem('analyticsData', JSON.stringify(seededAnalytics))
-    }
-  } catch {
-    localStorage.setItem('analyticsData', JSON.stringify(seededAnalytics))
-    tempData.value = seededAnalytics.temperature
-    moistureData.value = seededAnalytics.moisture
-  }
-}
-
 const formatShortTime = (value: string) =>
   new Date(value).toLocaleTimeString(undefined, {
     hour: 'numeric',
     minute: '2-digit'
   })
 
-onMounted(() => {
-  fetchHistoricalSensorReadings(20)
-    .then((readings) => {
-      const series: SensorChartSeries = toChartSeries(readings)
-      tempData.value = series.temperature
-      moistureData.value = series.moisture
+const toChartTimeLabel = (value: string) =>
+  new Date(value).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 
-      localStorage.setItem(
-        'analyticsData',
-        JSON.stringify({
-          temperature: series.temperature,
-          moisture: series.moisture
-        })
-      )
-    })
-    .catch(() => {
-      loadAnalyticsData()
-    })
+const destroyCharts = () => {
+  trendChart?.destroy()
+  moistureChart?.destroy()
+  trendChart = null
+  moistureChart = null
+}
+
+const readCssVariable = (name: string, fallback: string) => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+const renderChartJs = () => {
+  if (selectedLibrary.value !== 'Chart.js') {
+    destroyCharts()
+    return
+  }
+
+  if (!hasChartData.value || !trendCanvas.value || !moistureCanvas.value) {
+    destroyCharts()
+    return
+  }
+
+  destroyCharts()
+
+  const labels = tempData.value.map((point) => toChartTimeLabel(point.time))
+  const textColor = readCssVariable('--app-text-secondary', '#526075')
+  const gridColor = readCssVariable('--app-border-color', 'rgba(199, 208, 218, 0.6)')
+
+  const trendContext = trendCanvas.value.getContext('2d')
+  const moistureContext = moistureCanvas.value.getContext('2d')
+  if (!trendContext || !moistureContext) {
+    return
+  }
+
+  const trendConfig: ChartConfiguration<'line'> = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Temperature (°C)',
+          data: tempData.value.map((point) => point.value),
+          borderColor: '#de7f67',
+          backgroundColor: 'rgba(222, 127, 103, 0.18)',
+          pointRadius: 2,
+          tension: 0.32,
+          fill: true
+        },
+        {
+          label: 'Ambient (°C)',
+          data: ambientData.value.map((point) => point.value),
+          borderColor: '#4d7bb5',
+          backgroundColor: 'rgba(77, 123, 181, 0.12)',
+          pointRadius: 2,
+          tension: 0.3,
+          fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: textColor,
+            boxWidth: 12,
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: textColor,
+            maxRotation: 0
+          },
+          grid: {
+            color: gridColor
+          }
+        },
+        y: {
+          ticks: {
+            color: textColor
+          },
+          grid: {
+            color: gridColor
+          }
+        }
+      }
+    }
+  }
+
+  const moistureConfig: ChartConfiguration<'bar'> = {
+    type: 'bar',
+    data: {
+      labels: moistureData.value.map((point) => toChartTimeLabel(point.time)),
+      datasets: [
+        {
+          label: 'Moisture (%)',
+          data: moistureData.value.map((point) => point.value),
+          backgroundColor: 'rgba(73, 164, 131, 0.75)',
+          borderColor: '#49a483',
+          borderWidth: 1,
+          borderRadius: 8,
+          barPercentage: 0.72,
+          categoryPercentage: 0.72
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: {
+            color: textColor,
+            boxWidth: 12,
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: textColor,
+            maxRotation: 0
+          },
+          grid: {
+            color: gridColor
+          }
+        },
+        y: {
+          ticks: {
+            color: textColor
+          },
+          grid: {
+            color: gridColor
+          }
+        }
+      }
+    }
+  }
+
+  trendChart = new Chart(trendContext, trendConfig)
+  moistureChart = new Chart(moistureContext, moistureConfig)
+}
+
+onMounted(async () => {
+  try {
+    const devices = await fetchMyDevices()
+    const primaryDevice = devices[0]
+
+    if (!primaryDevice) {
+      noDevice.value = true
+      return
+    }
+
+    const readings = await fetchHistoricalDeviceReadings(primaryDevice.id, 20)
+    const series: SensorChartSeries = toChartSeries(readings)
+    tempData.value = series.temperature
+    moistureData.value = series.moisture
+    ambientData.value = series.ambientTemp
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load analytics.'
+  } finally {
+    isLoading.value = false
+  }
+})
+
+watch(
+  () => [
+    selectedLibrary.value,
+    tempData.value.length,
+    moistureData.value.length,
+    ambientData.value.length
+  ],
+  async () => {
+    await nextTick()
+    renderChartJs()
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  destroyCharts()
 })
 </script>
 
@@ -272,6 +509,20 @@ h2 {
   color: #526075;
   box-shadow: 0 16px 30px rgba(36, 48, 66, 0.08);
   font-weight: 700;
+}
+
+.empty-state {
+  max-width: 1120px;
+  margin: 0 auto 20px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px dashed #d9c8d1;
+  color: #526075;
+}
+
+.error-state {
+  color: #b33f5a;
 }
 
 .chart-grid {
@@ -401,6 +652,18 @@ h2 {
   color: #7a8799;
 }
 
+.chart-empty {
+  min-height: 300px;
+  border-radius: 22px;
+  border: 1px dashed #d9c8d1;
+  background: rgba(255, 255, 255, 0.72);
+  display: grid;
+  place-items: center;
+  color: #6c7a8d;
+  text-align: center;
+  padding: 20px;
+}
+
 .integration-card {
   max-width: 1120px;
   margin: 28px auto 0;
@@ -410,44 +673,76 @@ h2 {
   gap: 24px;
 }
 
+.library-switch {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.library-chip {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #eadfe5;
+  background: rgba(255, 255, 255, 0.9);
+  color: #526075;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.library-chip.active {
+  background: linear-gradient(135deg, #f3a6ba, #9fd9cc);
+  border-color: transparent;
+  color: #1f2937;
+}
+
 .integration-preview {
   position: relative;
-  min-height: 280px;
+  min-height: 360px;
   border-radius: 22px;
-  overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(252, 226, 234, 0.55), rgba(223, 247, 242, 0.55)),
-    #fff;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #eadfe5;
+  padding: 14px;
+}
+
+.real-charts {
+  display: grid;
+  gap: 12px;
+}
+
+.real-chart-card {
+  border: 1px solid #ebe1e6;
+  border-radius: 16px;
+  padding: 10px 12px 12px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.real-chart-title {
+  margin: 0 0 8px;
+  color: #526075;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.chart-canvas-wrap {
+  height: 130px;
+}
+
+.apex-placeholder {
+  min-height: 300px;
+  border-radius: 16px;
   border: 1px dashed #d9c8d1;
+  background: rgba(255, 255, 255, 0.72);
+  color: #6c7a8d;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 20px;
 }
 
-.preview-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, rgba(120, 134, 156, 0.12) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(120, 134, 156, 0.12) 1px, transparent 1px);
-  background-size: 52px 52px;
-}
-
-.preview-line {
-  position: absolute;
-  left: 7%;
-  right: 7%;
-  height: 3px;
-  border-radius: 999px;
-}
-
-.line-one {
-  top: 38%;
-  background: linear-gradient(90deg, #f0a7ba, #d889a0, #9fd9cc);
-  transform: rotate(-4deg);
-}
-
-.line-two {
-  top: 58%;
-  background: linear-gradient(90deg, #8cc7ea, #9fd9cc, #f8c79b);
-  transform: rotate(5deg);
+.preview-badge {
+  display: none;
 }
 
 @media (max-width: 900px) {

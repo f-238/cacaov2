@@ -15,7 +15,7 @@
       <div class="panel-head">
         <div>
           <h3>User Management</h3>
-          <p>Search, filter, edit, and remove local admin user records.</p>
+          <p>Admin users are loaded from the backend and changes are persisted immediately.</p>
         </div>
       </div>
 
@@ -29,7 +29,7 @@
           <input
             v-model.trim="searchQuery"
             type="search"
-            placeholder="Search name, email, or phone"
+            placeholder="Search name or email"
           >
         </label>
 
@@ -38,7 +38,6 @@
           <select v-model="roleFilter">
             <option value="All">All Roles</option>
             <option value="Admin">Admin</option>
-            <option value="Manager">Manager</option>
             <option value="Viewer">Viewer</option>
           </select>
         </label>
@@ -49,33 +48,34 @@
             <option value="All">All Statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
-            <option value="Pending">Pending</option>
           </select>
         </label>
       </div>
 
-      <div v-if="filteredUsers.length > 0" class="desktop-table">
+      <p v-if="isLoading" class="empty-copy">Loading users...</p>
+      <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
+      <p v-if="successMessage" class="message success">{{ successMessage }}</p>
+
+      <div v-if="!isLoading && filteredUsers.length > 0" class="desktop-table">
         <table>
           <thead>
             <tr>
               <th>Name</th>
               <th>Email</th>
-              <th>Phone</th>
               <th>Role</th>
               <th>Status</th>
+              <th>Created</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in filteredUsers" :key="user.email">
-              <template v-if="editingEmail === user.email">
+            <tr v-for="user in filteredUsers" :key="user.id">
+              <template v-if="editingUserId === user.id">
                 <td><input v-model.trim="draftUser.fullName" class="inline-input"></td>
                 <td><input v-model.trim="draftUser.email" class="inline-input" type="email"></td>
-                <td><input v-model.trim="draftUser.phone" class="inline-input"></td>
                 <td>
                   <select v-model="draftUser.role" class="inline-input inline-select">
                     <option>Admin</option>
-                    <option>Manager</option>
                     <option>Viewer</option>
                   </select>
                 </td>
@@ -83,17 +83,13 @@
                   <select v-model="draftUser.status" class="inline-input inline-select">
                     <option>Active</option>
                     <option>Inactive</option>
-                    <option>Pending</option>
                   </select>
                 </td>
+                <td>{{ formatDate(user.createdAt) }}</td>
                 <td>
                   <div class="action-row">
-                    <button class="action-button save" @click="saveEdit(user.email)">
-                      Save
-                    </button>
-                    <button class="action-button ghost" @click="cancelEdit">
-                      Cancel
-                    </button>
+                    <button class="action-button save" @click="saveEdit(user.id)">Save</button>
+                    <button class="action-button ghost" @click="cancelEdit">Cancel</button>
                   </div>
                 </td>
               </template>
@@ -101,13 +97,13 @@
               <template v-else>
                 <td>{{ user.fullName }}</td>
                 <td>{{ user.email }}</td>
-                <td>{{ user.phone || 'N/A' }}</td>
                 <td>
                   <span class="pill role-pill">{{ user.role }}</span>
                 </td>
                 <td>
                   <span class="pill" :class="statusClass(user.status)">{{ user.status }}</span>
                 </td>
+                <td>{{ formatDate(user.createdAt) }}</td>
                 <td>
                   <div class="action-row">
                     <button class="icon-button edit" @click="startEdit(user)" aria-label="Edit user">
@@ -115,7 +111,7 @@
                         <path d="m3 17.25 9.81-9.81 3.75 3.75L6.75 21H3Zm14.71-9.04a1 1 0 0 0 0-1.42l-2.5-2.5a1 1 0 0 0-1.42 0l-1.56 1.56 3.75 3.75Z" />
                       </svg>
                     </button>
-                    <button class="icon-button delete" @click="removeUser(user.email)" aria-label="Delete user">
+                    <button class="icon-button delete" @click="removeUser(user.id)" aria-label="Delete user">
                       <svg viewBox="0 0 24 24" focusable="false">
                         <path d="M9 3h6l1 2h5v2H3V5h5Zm1 7h2v8h-2Zm4 0h2v8h-2ZM7 10h2v8H7Zm1 11a2 2 0 0 1-2-2V8h12v11a2 2 0 0 1-2 2Z" />
                       </svg>
@@ -128,24 +124,21 @@
         </table>
       </div>
 
-      <div class="mobile-cards" v-if="filteredUsers.length > 0">
-        <article v-for="user in filteredUsers" :key="`mobile-${user.email}`" class="user-card">
-          <template v-if="editingEmail === user.email">
+      <div v-if="!isLoading && filteredUsers.length > 0" class="mobile-cards">
+        <article v-for="user in filteredUsers" :key="`mobile-${user.id}`" class="user-card">
+          <template v-if="editingUserId === user.id">
             <input v-model.trim="draftUser.fullName" class="inline-input" placeholder="Name">
             <input v-model.trim="draftUser.email" class="inline-input" type="email" placeholder="Email">
-            <input v-model.trim="draftUser.phone" class="inline-input" placeholder="Phone">
             <select v-model="draftUser.role" class="inline-input inline-select">
               <option>Admin</option>
-              <option>Manager</option>
               <option>Viewer</option>
             </select>
             <select v-model="draftUser.status" class="inline-input inline-select">
               <option>Active</option>
               <option>Inactive</option>
-              <option>Pending</option>
             </select>
             <div class="action-row">
-              <button class="action-button save" @click="saveEdit(user.email)">Save</button>
+              <button class="action-button save" @click="saveEdit(user.id)">Save</button>
               <button class="action-button ghost" @click="cancelEdit">Cancel</button>
             </div>
           </template>
@@ -160,37 +153,44 @@
             </div>
 
             <div class="card-meta">
-              <span><strong>Phone:</strong> {{ user.phone || 'N/A' }}</span>
               <span><strong>Role:</strong> {{ user.role }}</span>
+              <span><strong>Created:</strong> {{ formatDate(user.createdAt) }}</span>
             </div>
 
             <div class="action-row">
               <button class="action-button edit" @click="startEdit(user)">Edit</button>
-              <button class="action-button delete" @click="removeUser(user.email)">Delete</button>
+              <button class="action-button delete" @click="removeUser(user.id)">Delete</button>
             </div>
           </template>
         </article>
       </div>
 
-      <p v-if="filteredUsers.length === 0" class="empty-copy">No users match the current search and filters.</p>
+      <p v-if="!isLoading && filteredUsers.length === 0" class="empty-copy">No users match the current filters.</p>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
-type UserRole = 'Admin' | 'Manager' | 'Viewer'
-type UserStatus = 'Active' | 'Inactive' | 'Pending'
+import {
+  deleteAdminUser,
+  fetchAdminUsers,
+  toFrontendManagedUser,
+  updateAdminUser,
+  type FrontendManagedUser,
+  type FrontendManagedUserRole
+} from '../services/users'
 
-type StoredUser = {
+type UserStatus = 'Active' | 'Inactive'
+
+type ManagedUserRow = {
+  id: number
   fullName: string
   email: string
-  phone?: string
-  role?: UserRole
-  status?: UserStatus
-  createdAt?: string
-  password?: string
+  role: FrontendManagedUserRole
+  status: UserStatus
+  createdAt: string
 }
 
 const props = defineProps<{
@@ -198,48 +198,49 @@ const props = defineProps<{
 }>()
 
 const searchQuery = ref('')
-const roleFilter = ref<'All' | UserRole>('All')
+const roleFilter = ref<'All' | FrontendManagedUserRole>('All')
 const statusFilter = ref<'All' | UserStatus>('All')
-const editingEmail = ref('')
-const users = ref<StoredUser[]>(loadUsers())
+const editingUserId = ref<number | null>(null)
+const users = ref<ManagedUserRow[]>([])
+const isLoading = ref(false)
+const errorMessage = ref('')
+const successMessage = ref('')
 
-const draftUser = reactive<StoredUser>({
+const draftUser = reactive<{
+  fullName: string
+  email: string
+  role: FrontendManagedUserRole
+  status: UserStatus
+}>({
   fullName: '',
   email: '',
-  phone: '',
   role: 'Viewer',
   status: 'Active'
 })
 
-function normalizeUser(user: StoredUser, index: number): StoredUser {
-  const defaultRole: UserRole[] = ['Admin', 'Manager', 'Viewer']
-  const defaultStatus: UserStatus[] = ['Active', 'Pending', 'Inactive']
-
+function toRow(user: FrontendManagedUser): ManagedUserRow {
   return {
-    ...user,
-    phone: user.phone ?? '',
-    role: user.role ?? defaultRole[index % defaultRole.length],
-    status: user.status ?? defaultStatus[index % defaultStatus.length]
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    status: user.isActive ? 'Active' : 'Inactive',
+    createdAt: user.createdAt
   }
 }
 
-function loadUsers() {
-  const storedUsers = localStorage.getItem('users')
-
-  if (!storedUsers) {
-    return []
-  }
+async function loadUsers() {
+  isLoading.value = true
+  errorMessage.value = ''
 
   try {
-    const parsed = JSON.parse(storedUsers) as StoredUser[]
-    return Array.isArray(parsed) ? parsed.map(normalizeUser) : []
-  } catch {
-    return []
+    const apiUsers = await fetchAdminUsers()
+    users.value = apiUsers.map(toFrontendManagedUser).map(toRow)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to load users.'
+  } finally {
+    isLoading.value = false
   }
-}
-
-function persistUsers() {
-  localStorage.setItem('users', JSON.stringify(users.value))
 }
 
 const filteredUsers = computed(() => {
@@ -249,8 +250,7 @@ const filteredUsers = computed(() => {
     const matchesQuery =
       !query ||
       user.fullName.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
-      (user.phone ?? '').toLowerCase().includes(query)
+      user.email.toLowerCase().includes(query)
 
     const matchesRole = roleFilter.value === 'All' || user.role === roleFilter.value
     const matchesStatus = statusFilter.value === 'All' || user.status === statusFilter.value
@@ -259,59 +259,91 @@ const filteredUsers = computed(() => {
   })
 })
 
-function startEdit(user: StoredUser) {
-  editingEmail.value = user.email
-  Object.assign(draftUser, user)
+function startEdit(user: ManagedUserRow) {
+  editingUserId.value = user.id
+  draftUser.fullName = user.fullName
+  draftUser.email = user.email
+  draftUser.role = user.role
+  draftUser.status = user.status
+  errorMessage.value = ''
+  successMessage.value = ''
 }
 
 function cancelEdit() {
-  editingEmail.value = ''
+  editingUserId.value = null
 }
 
-function saveEdit(originalEmail: string) {
-  const nextEmail = draftUser.email?.trim() ?? ''
-  const nextName = draftUser.fullName?.trim() ?? ''
+async function saveEdit(userId: number) {
+  const nextName = draftUser.fullName.trim()
+  const nextEmail = draftUser.email.trim()
 
   if (!nextName || !nextEmail) {
+    errorMessage.value = 'Name and email are required.'
     return
   }
 
-  users.value = users.value.map((user) =>
-    user.email === originalEmail
-      ? normalizeUser(
-          {
-            ...user,
-            fullName: nextName,
-            email: nextEmail,
-            phone: draftUser.phone?.trim() ?? '',
-            role: draftUser.role,
-            status: draftUser.status
-          },
-          0
-        )
-      : user
-  )
+  if (!window.confirm('Save these user account changes?')) {
+    return
+  }
 
-  persistUsers()
-  cancelEdit()
-}
+  try {
+    const updated = await updateAdminUser(userId, {
+      fullName: nextName,
+      email: nextEmail,
+      role: draftUser.role,
+      isActive: draftUser.status === 'Active'
+    })
 
-function removeUser(email: string) {
-  users.value = users.value.filter((user) => user.email !== email)
-  persistUsers()
-
-  if (editingEmail.value === email) {
+    const row = toRow(toFrontendManagedUser(updated))
+    users.value = users.value.map((user) => (user.id === userId ? row : user))
+    successMessage.value = 'User updated successfully.'
+    errorMessage.value = ''
     cancelEdit()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to update user.'
   }
 }
 
-function statusClass(status?: UserStatus) {
+async function removeUser(userId: number) {
+  const targetUser = users.value.find((user) => user.id === userId)
+  const label = targetUser ? `${targetUser.fullName} (${targetUser.email})` : `ID ${userId}`
+
+  if (!window.confirm(`Delete user ${label}? This action cannot be undone.`)) {
+    return
+  }
+
+  try {
+    await deleteAdminUser(userId)
+    users.value = users.value.filter((user) => user.id !== userId)
+    successMessage.value = 'User removed successfully.'
+    errorMessage.value = ''
+
+    if (editingUserId.value === userId) {
+      cancelEdit()
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to remove user.'
+  }
+}
+
+function statusClass(status: UserStatus) {
   return {
     active: status === 'Active',
-    pending: status === 'Pending',
     inactive: status === 'Inactive'
   }
 }
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
+}
+
+onMounted(() => {
+  loadUsers()
+})
 </script>
 
 <style scoped>
@@ -420,14 +452,6 @@ function statusClass(status?: UserStatus) {
   padding-left: 42px;
 }
 
-.search-field input:focus,
-.filter-field select:focus,
-.inline-input:focus {
-  outline: none;
-  border-color: #d9a6b8;
-  box-shadow: 0 0 0 4px rgba(233, 189, 204, 0.25);
-}
-
 .desktop-table {
   display: block;
   overflow-x: auto;
@@ -471,11 +495,6 @@ tbody tr:last-child td {
 .active {
   background: #effaf5;
   color: #3b9274;
-}
-
-.pending {
-  background: #fff7e8;
-  color: #b88a2b;
 }
 
 .inactive {
@@ -566,6 +585,23 @@ tbody tr:last-child td {
 
 .inline-select {
   width: 100%;
+}
+
+.message {
+  margin: 0 0 14px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 0.95rem;
+}
+
+.error {
+  background: #fff1f3;
+  color: #b33f5a;
+}
+
+.success {
+  background: #edf9f5;
+  color: #2b7a62;
 }
 
 @media (max-width: 900px) {

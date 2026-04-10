@@ -2,117 +2,223 @@
   <section class="device-shell">
     <div class="device-header">
       <div>
-        <p class="eyebrow">Device Overview</p>
-        <h1>Connected Dryer Unit</h1>
+        <p class="eyebrow">Device Registration</p>
+        <h1>Manage Connected Dryer Units</h1>
         <p class="subtitle">
-          Temporary frontend device data for status monitoring and UI testing.
+          Register devices to your account and issue ingest tokens for secure IoT uploads.
         </p>
-      </div>
-
-      <div class="status-pill" :class="device.status === 'online' ? 'is-online' : 'is-offline'">
-        <span class="status-icon" aria-hidden="true">
-          <svg v-if="device.status === 'online'" viewBox="0 0 24 24" focusable="false">
-            <path
-              d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm-1 14-4-4 1.41-1.41L11 13.17l4.59-4.58L17 10Z"
-            />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" focusable="false">
-            <path
-              d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm4.59 13.17L15.17 16.6 12 13.41 8.83 16.6l-1.42-1.43L10.59 12 7.41 8.83 8.83 7.4 12 10.59l3.17-3.18 1.42 1.43L13.41 12Z"
-            />
-          </svg>
-        </span>
-        {{ device.status === 'online' ? 'Online' : 'Offline' }}
       </div>
     </div>
 
-    <div class="device-grid">
-      <article class="device-card hero-card">
-        <div class="hero-top">
-          <span class="device-badge">Primary unit</span>
-          <span class="device-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path
-                d="M6 3h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4v2h2v2H8v-2h2v-2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v9h12V5Z"
-              />
-            </svg>
-          </span>
-        </div>
+    <article v-if="latestToken" class="token-card">
+      <p class="token-title">Latest Device Ingest Token</p>
+      <p class="token-serial">Device: {{ latestToken.deviceSerial }}</p>
+      <code class="token-value">{{ latestToken.ingestToken }}</code>
+      <p class="token-note">
+        Save this token in your IoT device. For uploads, send it in header:
+        <code>X-Device-Token</code>
+      </p>
+    </article>
 
-        <p class="hero-label">Device ID</p>
-        <h2>{{ device.id }}</h2>
-        <p class="hero-copy">
-          This identifier is loaded from local storage and can be swapped with real hardware data later.
-        </p>
-      </article>
+    <article class="form-card">
+      <h2>Add New Device</h2>
+      <form class="device-form" @submit.prevent="createDevice">
+        <label class="field">
+          <span>Device Name</span>
+          <input
+            v-model.trim="form.deviceName"
+            type="text"
+            placeholder="Cacao Dryer Main Unit"
+            required
+          >
+        </label>
 
-      <article class="device-card info-card">
-        <div class="info-row">
-          <span class="info-label">Current status</span>
-          <span class="info-value" :class="device.status === 'online' ? 'text-online' : 'text-offline'">
-            {{ device.status === 'online' ? 'Online' : 'Offline' }}
-          </span>
-        </div>
+        <label class="field">
+          <span>Device Serial / ID</span>
+          <input
+            v-model.trim="form.deviceSerial"
+            type="text"
+            placeholder="CACAO-DEV-0001"
+            required
+          >
+        </label>
 
-        <div class="info-row">
-          <span class="info-label">Last seen</span>
-          <span class="info-value">{{ formattedLastSeen }}</span>
-        </div>
+        <label class="field">
+          <span>Firmware Version (optional)</span>
+          <input
+            v-model.trim="form.firmwareVersion"
+            type="text"
+            placeholder="v1.2.0"
+          >
+        </label>
 
-        <div class="info-row">
-          <span class="info-label">Local source</span>
-          <span class="info-value muted">`localStorage.deviceInfo`</span>
+        <button class="primary-button" type="submit" :disabled="isSaving">
+          {{ isSaving ? 'Saving...' : 'Add Device' }}
+        </button>
+      </form>
+
+      <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
+      <p v-if="successMessage" class="message success">{{ successMessage }}</p>
+    </article>
+
+    <article class="list-card">
+      <h2>Your Devices</h2>
+
+      <p v-if="isLoading" class="empty-state">Loading devices...</p>
+      <p v-else-if="devices.length === 0" class="empty-state">No devices registered yet.</p>
+
+      <div v-else class="device-grid">
+        <div v-for="device in devices" :key="device.id" class="device-row">
+          <div class="device-main">
+            <h3>{{ device.name }}</h3>
+            <p class="serial">{{ device.serial }}</p>
+          </div>
+
+          <div class="meta">
+            <span :class="['status-pill', device.isOnline ? 'is-online' : 'is-offline']">
+              {{ device.isOnline ? 'Online' : 'Offline' }}
+            </span>
+            <span class="meta-item">
+              Last seen: {{ device.lastSeen ? formatDateTime(device.lastSeen) : 'Never' }}
+            </span>
+            <span class="meta-item">
+              Firmware: {{ device.firmwareVersion || 'N/A' }}
+            </span>
+          </div>
+
+          <button
+            class="secondary-button"
+            type="button"
+            :disabled="rotatingDeviceId === device.id"
+            @click="rotateToken(device.id)"
+          >
+            {{ rotatingDeviceId === device.id ? 'Issuing...' : 'Rotate Ingest Token' }}
+          </button>
         </div>
-      </article>
-    </div>
+      </div>
+    </article>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import {
+  createMyDevice,
+  fetchMyDevices,
+  rotateMyDeviceIngestToken,
+  toFrontendDevice,
+  type FrontendDevice
+} from '../services/devices'
 
-type Device = {
-  id: string
-  status: 'online' | 'offline'
-  lastSeen: string
+type DeviceForm = {
+  deviceName: string
+  deviceSerial: string
+  firmwareVersion: string
 }
 
-const defaultDevice: Device = {
-  id: 'CACAO-DRV-001',
-  status: 'online',
-  lastSeen: '2026-04-09T13:45:00.000Z'
+type TokenPreview = {
+  deviceId: number
+  deviceSerial: string
+  ingestToken: string
+  issuedAt: string
 }
 
-const device = ref<Device>(defaultDevice)
+const devices = ref<FrontendDevice[]>([])
+const isLoading = ref(true)
+const isSaving = ref(false)
+const rotatingDeviceId = ref<number | null>(null)
+const errorMessage = ref('')
+const successMessage = ref('')
+const latestToken = ref<TokenPreview | null>(null)
 
-const formattedLastSeen = computed(() =>
-  new Date(device.value.lastSeen).toLocaleString()
-)
+const form = ref<DeviceForm>({
+  deviceName: '',
+  deviceSerial: '',
+  firmwareVersion: ''
+})
 
-const loadDeviceInfo = () => {
-  const storedDevice = localStorage.getItem('deviceInfo')
+async function loadDevices() {
+  isLoading.value = true
+  errorMessage.value = ''
 
-  if (!storedDevice) {
-    localStorage.setItem('deviceInfo', JSON.stringify(defaultDevice))
+  try {
+    const apiDevices = await fetchMyDevices()
+    devices.value = apiDevices.map(toFrontendDevice)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to load devices.'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function createDevice() {
+  if (!window.confirm('Create this new device and issue an ingest token?')) {
     return
   }
 
-  try {
-    const parsed = JSON.parse(storedDevice) as Partial<Device>
+  isSaving.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
 
-    device.value = {
-      id: typeof parsed.id === 'string' ? parsed.id : defaultDevice.id,
-      status: parsed.status === 'offline' ? 'offline' : 'online',
-      lastSeen: typeof parsed.lastSeen === 'string' ? parsed.lastSeen : defaultDevice.lastSeen
+  try {
+    const created = await createMyDevice({
+      deviceName: form.value.deviceName,
+      deviceSerial: form.value.deviceSerial,
+      firmwareVersion: form.value.firmwareVersion || undefined
+    })
+
+    latestToken.value = {
+      deviceId: created.id,
+      deviceSerial: created.device_serial,
+      ingestToken: created.ingest_token,
+      issuedAt: new Date().toISOString()
     }
-  } catch {
-    localStorage.setItem('deviceInfo', JSON.stringify(defaultDevice))
-    device.value = defaultDevice
+
+    form.value = {
+      deviceName: '',
+      deviceSerial: '',
+      firmwareVersion: ''
+    }
+    successMessage.value = `Device ${created.device_serial} created and token issued.`
+    await loadDevices()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to create device.'
+  } finally {
+    isSaving.value = false
   }
 }
 
+async function rotateToken(deviceId: number) {
+  if (!window.confirm('Rotate ingest token for this device? The previous token will stop working.')) {
+    return
+  }
+
+  rotatingDeviceId.value = deviceId
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    const tokenData = await rotateMyDeviceIngestToken(deviceId)
+    latestToken.value = {
+      deviceId: tokenData.device_id,
+      deviceSerial: tokenData.device_serial,
+      ingestToken: tokenData.ingest_token,
+      issuedAt: tokenData.issued_at
+    }
+    successMessage.value = `Ingest token rotated for ${tokenData.device_serial}.`
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Failed to rotate ingest token.'
+  } finally {
+    rotatingDeviceId.value = null
+  }
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString()
+}
+
 onMounted(() => {
-  loadDeviceInfo()
+  loadDevices()
 })
 </script>
 
@@ -133,10 +239,6 @@ onMounted(() => {
 .device-header {
   max-width: 1120px;
   margin: 0 auto 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
 }
 
 .eyebrow {
@@ -149,7 +251,8 @@ onMounted(() => {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0;
   color: #243042;
 }
@@ -159,166 +262,190 @@ h1 {
 }
 
 h2 {
-  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  font-size: 1.25rem;
+  margin-bottom: 14px;
 }
 
 .subtitle {
   margin: 12px 0 0;
   color: #5f6d81;
   line-height: 1.6;
-  max-width: 620px;
+  max-width: 720px;
+}
+
+.token-card,
+.form-card,
+.list-card {
+  max-width: 1120px;
+  margin: 0 auto 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #efe3e7;
+  border-radius: 24px;
+  box-shadow: 0 22px 50px rgba(36, 48, 66, 0.08);
+  padding: 22px;
+}
+
+.token-title {
+  margin: 0;
+  color: #2d3b52;
+  font-weight: 700;
+}
+
+.token-serial,
+.token-note {
+  margin: 10px 0 0;
+  color: #5f6d81;
+}
+
+.token-value {
+  display: block;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  word-break: break-all;
+  font-size: 0.9rem;
+}
+
+.device-form {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span {
+  font-size: 0.92rem;
+  color: #526075;
+  font-weight: 600;
+}
+
+input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e6dce2;
+  border-radius: 14px;
+  background: #fff;
+  color: #243042;
+}
+
+input:focus {
+  outline: none;
+  border-color: #d9a6b8;
+  box-shadow: 0 0 0 4px rgba(233, 189, 204, 0.25);
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary-button {
+  border: 0;
+  background: linear-gradient(135deg, #f3a6ba, #9fd9cc);
+  color: #1f2937;
+}
+
+.secondary-button {
+  border: 1px solid #eadfe5;
+  background: rgba(255, 255, 255, 0.88);
+  color: #526075;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.message {
+  margin: 14px 0 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.94rem;
+}
+
+.error {
+  background: #fff1f3;
+  color: #b33f5a;
+}
+
+.success {
+  background: #edf9f5;
+  color: #2b7a62;
+}
+
+.empty-state {
+  margin: 0;
+  color: #64748b;
+}
+
+.device-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.device-row {
+  border: 1px solid #f1e7eb;
+  background: #fffdfd;
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.device-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.serial {
+  margin: 0;
+  color: #526075;
+  font-weight: 600;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.meta-item {
+  color: #526075;
+  font-size: 0.92rem;
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid;
-  box-shadow: 0 16px 30px rgba(36, 48, 66, 0.08);
+  font-size: 0.85rem;
   font-weight: 700;
-}
-
-.status-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.status-icon svg {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-  display: block;
 }
 
 .is-online {
   background: #eefaf5;
-  border-color: #d6efe5;
   color: #2f8b6b;
 }
 
 .is-offline {
   background: #fff1f3;
-  border-color: #f1d9de;
   color: #c05672;
-}
-
-.device-grid {
-  max-width: 1120px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 22px;
-}
-
-.device-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #efe3e7;
-  border-radius: 24px;
-  box-shadow: 0 22px 50px rgba(36, 48, 66, 0.08);
-}
-
-.hero-card {
-  padding: 26px;
-}
-
-.hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 26px;
-}
-
-.device-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: #fff7f9;
-  color: #b95d79;
-  font-size: 0.92rem;
-  font-weight: 700;
-}
-
-.device-icon {
-  width: 58px;
-  height: 58px;
-  display: grid;
-  place-items: center;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #ffe5ed, #def6f0);
-  color: #4f7088;
-}
-
-.device-icon svg {
-  width: 28px;
-  height: 28px;
-  fill: currentColor;
-}
-
-.hero-label {
-  margin: 0 0 10px;
-  color: #7a8799;
-  font-size: 0.92rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.hero-copy {
-  margin: 14px 0 0;
-  color: #627085;
-  line-height: 1.6;
-  max-width: 40ch;
-}
-
-.info-card {
-  padding: 26px;
-  display: grid;
-  gap: 18px;
-  align-content: start;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: #fffdfd;
-  border: 1px solid #f3eaee;
-}
-
-.info-label {
-  color: #6e7b8f;
-  font-weight: 600;
-}
-
-.info-value {
-  text-align: right;
-  color: #243042;
-  font-weight: 700;
-}
-
-.text-online {
-  color: #2f8b6b;
-}
-
-.text-offline {
-  color: #c05672;
-}
-
-.muted {
-  color: #7d8a9d;
-  font-weight: 600;
-}
-
-@media (max-width: 900px) {
-  .device-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 640px) {
@@ -326,21 +453,11 @@ h2 {
     padding: 22px 14px 36px;
   }
 
-  .device-header {
-    flex-direction: column;
-  }
-
-  .device-card {
+  .token-card,
+  .form-card,
+  .list-card {
     border-radius: 20px;
-  }
-
-  .info-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .info-value {
-    text-align: left;
+    padding: 16px;
   }
 }
 </style>

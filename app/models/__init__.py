@@ -4,5 +4,6 @@ from app.models.device import Device
 from app.models.refresh_token import RefreshToken
 from app.models.sensor_reading import SensorReading
 from app.models.user import User
+from app.models.user_settings import UserSettings
 
-__all__ = ["Base", "Device", "DeviceAlert", "RefreshToken", "SensorReading", "User"]
+__all__ = ["Base", "Device", "DeviceAlert", "RefreshToken", "SensorReading", "User", "UserSettings"]

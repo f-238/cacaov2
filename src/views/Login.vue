@@ -7,6 +7,10 @@
 
       <div class="login-copy">
         <p class="eyebrow">Welcome back</p>
+        <h1>Sign in to your workspace</h1>
+        <p class="subtitle">
+          Review device health, monitor drying sessions, and manage your account from one dashboard.
+        </p>
       </div>
 
       <form class="login-form" @submit.prevent="login">
@@ -117,7 +121,7 @@ const login = async () => {
 
 <style scoped>
 :global(body) {
-  font-family: 'Inter', 'Poppins', 'Roboto', sans-serif;
+  font-family: inherit;
 }
 
 .login-shell {

@@ -299,6 +299,10 @@ const loadSettings = () => {
 }
 
 const saveSettings = () => {
+  if (!window.confirm('Save admin settings changes?')) {
+    return
+  }
+
   localStorage.setItem('adminSettings', JSON.stringify(form.value))
   savedMessage.value = 'Settings saved locally.'
 

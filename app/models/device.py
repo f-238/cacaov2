@@ -16,6 +16,8 @@ class Device(Base):
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     firmware_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ingest_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    ingest_token_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

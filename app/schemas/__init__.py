@@ -7,20 +7,32 @@ from app.schemas.auth import (
     TokenPair,
     TokenRefreshResponse,
 )
-from app.schemas.device import DeviceCreate, DeviceRead, DeviceUpdate
+from app.schemas.device import (
+    DeviceCreate,
+    DeviceIngestTokenRead,
+    DeviceProvisionRead,
+    DeviceRead,
+    DeviceUpdate,
+)
+from app.schemas.iot import IoTReadingIngestRequest, IoTReadingIngestResponse
 from app.schemas.sensor_reading import (
     SensorReadingExportRequest,
     SensorReadingRead,
     SensorReadingSummary,
 )
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate, UserProfileRead, UserRead
+from app.schemas.user_settings import UserSettingsRead, UserSettingsUpdate
 
 __all__ = [
     "AlertRead",
     "AlertResolveRequest",
     "DeviceCreate",
+    "DeviceIngestTokenRead",
+    "DeviceProvisionRead",
     "DeviceRead",
     "DeviceUpdate",
+    "IoTReadingIngestRequest",
+    "IoTReadingIngestResponse",
     "LoginRequest",
     "LogoutRequest",
     "MessageResponse",
@@ -31,5 +43,8 @@ __all__ = [
     "TokenPair",
     "TokenRefreshResponse",
     "UserCreate",
+    "UserProfileRead",
     "UserRead",
+    "UserSettingsRead",
+    "UserSettingsUpdate",
 ]

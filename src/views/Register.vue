@@ -181,13 +181,7 @@ const register = async () => {
 
 <style scoped>
 :global(body) {
-  margin: 0;
-  font-family: 'Inter', 'Poppins', 'Roboto', sans-serif;
-  background:
-    radial-gradient(circle at top left, #ffe3ec 0, transparent 28%),
-    radial-gradient(circle at bottom right, #dff7f2 0, transparent 32%),
-    #fffdfd;
-  color: #243042;
+  font-family: inherit;
 }
 
 :global(*) {

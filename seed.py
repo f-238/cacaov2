@@ -9,12 +9,20 @@ from app.models.alert import AlertSeverity, DeviceAlert
 from app.models.device import Device
 from app.models.sensor_reading import SensorReading
 from app.models.user import User, UserRole
+from app.models.user_settings import UserSettings
+from app.utils.device_tokens import generate_device_token, hash_device_token
 from app.utils.security import get_password_hash
 
 
 ADMIN_EMAIL = "admin@cacaomonitor.local"
 USER_EMAIL = "user@cacaomonitor.local"
 DEVICE_SERIAL = "CACAO-DEV-0001"
+SAMPLE_USERS = (
+    ("System Administrator", ADMIN_EMAIL, "admin123", UserRole.ADMIN),
+    ("Normal User", USER_EMAIL, "user123", UserRole.USER),
+    ("Field Operator", "operator@cacaomonitor.local", "operator123", UserRole.USER),
+    ("Quality Analyst", "qa@cacaomonitor.local", "qauser123", UserRole.USER),
+)
 
 
 def get_or_create_user(
@@ -72,6 +80,24 @@ def get_or_create_device(db, *, user_id: int) -> Device:
     device.firmware_version = "v1.2.0"
     db.flush()
     return device
+
+
+def ensure_default_settings(db, *, user_id: int) -> UserSettings:
+    settings = db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
+
+    if settings is None:
+        settings = UserSettings(user_id=user_id)
+        db.add(settings)
+        db.flush()
+        return settings
+
+    settings.theme_mode = "system"
+    settings.font_size = "medium"
+    settings.primary_color = "#1f2937"
+    settings.secondary_color = "#526075"
+    settings.accent_color = "#f3a6ba"
+    db.flush()
+    return settings
 
 
 def reseed_sensor_readings(db, *, device_id: int) -> int:
@@ -138,29 +164,35 @@ def reseed_alerts(db, *, device_id: int, user_id: int) -> int:
 
 def main() -> None:
     with SyncSessionLocal() as db:
-        admin_user = get_or_create_user(
-            db,
-            full_name="System Administrator",
-            email=ADMIN_EMAIL,
-            password="admin123",
-            role=UserRole.ADMIN,
-        )
-        normal_user = get_or_create_user(
-            db,
-            full_name="Normal User",
-            email=USER_EMAIL,
-            password="user123",
-            role=UserRole.USER,
-        )
+        seeded_users: list[tuple[User, str]] = []
+
+        for full_name, email, password, role in SAMPLE_USERS:
+            user = get_or_create_user(
+                db,
+                full_name=full_name,
+                email=email,
+                password=password,
+                role=role,
+            )
+            ensure_default_settings(db, user_id=user.id)
+            seeded_users.append((user, password))
+
+        normal_user = next(user for user, _ in seeded_users if user.email == USER_EMAIL)
+
         device = get_or_create_device(db, user_id=normal_user.id)
+        ingest_token = generate_device_token()
+        device.ingest_token_hash = hash_device_token(ingest_token)
+        device.ingest_token_created_at = datetime.now(timezone.utc)
         reading_count = reseed_sensor_readings(db, device_id=device.id)
         alert_count = reseed_alerts(db, device_id=device.id, user_id=normal_user.id)
         db.commit()
 
     print("Seed complete.")
-    print(f"Admin user: {ADMIN_EMAIL} / admin123")
-    print(f"Normal user: {USER_EMAIL} / user123")
+    for user, password in seeded_users:
+        role = "admin" if user.role == UserRole.ADMIN else "user"
+        print(f"User ({role}): {user.email} / {password}")
     print(f"Device serial: {DEVICE_SERIAL}")
+    print(f"Device ingest token: {ingest_token}")
     print(f"Sensor readings inserted: {reading_count}")
     print(f"Alerts inserted: {alert_count}")
 

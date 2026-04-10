@@ -15,7 +15,7 @@ from app.schemas.user import UserCreate, UserRead
 from app.services.auth import (
     authenticate_user,
     create_user,
-    logout_refresh_token,
+    logout_user_sessions,
     refresh_access_token,
 )
 from app.models.user import User
@@ -46,8 +46,13 @@ async def refresh(payload: RefreshTokenRequest, db=Depends(get_db)) -> TokenRefr
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(payload: LogoutRequest, db=Depends(get_db)) -> None:
-    await logout_refresh_token(db, payload.refresh_token)
+async def logout(
+    current_user: Annotated[User, Depends(get_current_user)],
+    payload: LogoutRequest | None = None,
+    db=Depends(get_db),
+) -> None:
+    refresh_token = payload.refresh_token if payload else None
+    await logout_user_sessions(db, current_user, refresh_token)
 
 
 @router.get("/me", response_model=UserRead)

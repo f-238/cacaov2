@@ -5,16 +5,28 @@
         <p class="eyebrow">Alert Center</p>
         <h1>System Notifications</h1>
         <p class="subtitle">
-          Local alert records for testing info, warning, and critical states.
+          Backend alert records for your registered device.
         </p>
       </div>
 
       <div class="summary-pills">
-        <span class="summary-pill">{{ alerts.length }} alerts</span>
+        <span class="summary-pill">{{ summaryText }}</span>
       </div>
     </div>
 
-    <div class="alerts-list" v-if="alerts.length > 0">
+    <div v-if="isLoading" class="empty-state">
+      Loading alerts...
+    </div>
+
+    <div v-else-if="noDevice" class="empty-state">
+      No device is registered to your account yet.
+    </div>
+
+    <div v-else-if="loadError" class="empty-state error-state">
+      {{ loadError }}
+    </div>
+
+    <div class="alerts-list" v-else-if="alerts.length > 0">
       <article
         v-for="alert in alerts"
         :key="alert.id"
@@ -59,7 +71,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { fetchDeviceAlerts, type ApiAlertSeverity } from '../services/alerts'
+import { fetchMyDevices } from '../services/devices'
 
 type AlertItem = {
   id: number
@@ -68,49 +82,29 @@ type AlertItem = {
   timestamp: string
 }
 
-const sampleAlerts: AlertItem[] = [
-  {
-    id: 1,
-    message: 'Drying cycle started successfully for chamber A.',
-    type: 'info',
-    timestamp: '2026-04-09T08:15:00.000Z'
-  },
-  {
-    id: 2,
-    message: 'Moisture level is approaching the upper threshold.',
-    type: 'warning',
-    timestamp: '2026-04-09T10:20:00.000Z'
-  },
-  {
-    id: 3,
-    message: 'Critical temperature spike detected. Immediate review recommended.',
-    type: 'critical',
-    timestamp: '2026-04-09T12:05:00.000Z'
-  }
-]
-
 const alerts = ref<AlertItem[]>([])
+const isLoading = ref(true)
+const noDevice = ref(false)
+const loadError = ref('')
 
-const loadAlerts = () => {
-  const storedAlerts = localStorage.getItem('alerts')
-
-  if (!storedAlerts) {
-    localStorage.setItem('alerts', JSON.stringify(sampleAlerts))
-    alerts.value = sampleAlerts
-    return
+const summaryText = computed(() => {
+  if (isLoading.value) {
+    return 'Loading alerts...'
   }
 
-  try {
-    const parsed = JSON.parse(storedAlerts) as AlertItem[]
-    alerts.value = Array.isArray(parsed) ? parsed : sampleAlerts
+  return `${alerts.value.length} alerts`
+})
 
-    if (!Array.isArray(parsed)) {
-      localStorage.setItem('alerts', JSON.stringify(sampleAlerts))
-    }
-  } catch {
-    localStorage.setItem('alerts', JSON.stringify(sampleAlerts))
-    alerts.value = sampleAlerts
+const mapSeverity = (severity: ApiAlertSeverity): AlertItem['type'] => {
+  if (severity === 'critical') {
+    return 'critical'
   }
+
+  if (severity === 'warning') {
+    return 'warning'
+  }
+
+  return 'info'
 }
 
 const formatTimestamp = (value: string) =>
@@ -121,8 +115,28 @@ const formatTimestamp = (value: string) =>
     minute: '2-digit'
   })
 
-onMounted(() => {
-  loadAlerts()
+onMounted(async () => {
+  try {
+    const devices = await fetchMyDevices()
+    const primaryDevice = devices[0]
+
+    if (!primaryDevice) {
+      noDevice.value = true
+      return
+    }
+
+    const backendAlerts = await fetchDeviceAlerts(primaryDevice.id)
+    alerts.value = backendAlerts.map((alert) => ({
+      id: alert.id,
+      message: alert.message,
+      type: mapSeverity(alert.severity),
+      timestamp: alert.created_at
+    }))
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load alerts.'
+  } finally {
+    isLoading.value = false
+  }
 })
 </script>
 
@@ -289,6 +303,10 @@ h1 {
   border: 1px solid #efe3e7;
   border-radius: 22px;
   box-shadow: 0 22px 50px rgba(36, 48, 66, 0.08);
+}
+
+.error-state {
+  color: #b33f5a;
 }
 
 @media (max-width: 720px) {

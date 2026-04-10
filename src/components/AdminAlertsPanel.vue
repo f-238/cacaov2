@@ -65,7 +65,7 @@
                 <input
                   :checked="alert.resolved"
                   type="checkbox"
-                  @change="toggleResolved(alert.id)"
+                  @change="toggleResolved(alert.id, alert.resolved)"
                 />
                 <span>{{ alert.resolved ? 'Yes' : 'No' }}</span>
               </label>
@@ -124,7 +124,7 @@
             <input
               :checked="alert.resolved"
               type="checkbox"
-              @change="toggleResolved(alert.id)"
+              @change="toggleResolved(alert.id, alert.resolved)"
             />
             <span>Resolved</span>
           </label>
@@ -258,7 +258,12 @@ const filteredAlerts = computed(() => {
 
 const unresolvedCount = computed(() => alerts.value.filter((alert) => !alert.resolved).length)
 
-const toggleResolved = (id: number) => {
+const toggleResolved = (id: number, currentlyResolved: boolean) => {
+  const nextLabel = currentlyResolved ? 'mark as unresolved' : 'mark as resolved'
+  if (!window.confirm(`Are you sure you want to ${nextLabel}?`)) {
+    return
+  }
+
   alerts.value = alerts.value.map((alert) =>
     alert.id === id ? { ...alert, resolved: !alert.resolved } : alert
   )
@@ -266,6 +271,10 @@ const toggleResolved = (id: number) => {
 }
 
 const markResolved = (id: number) => {
+  if (!window.confirm('Mark this alert as resolved?')) {
+    return
+  }
+
   alerts.value = alerts.value.map((alert) =>
     alert.id === id ? { ...alert, resolved: true } : alert
   )

@@ -6,9 +6,11 @@ export type ApiUser = {
   id: number
   full_name: string
   email: string
+  avatar_url: string | null
   role: ApiUserRole
   is_active: boolean
   created_at: string
+  updated_at?: string
 }
 
 export type AuthTokens = {
@@ -49,6 +51,14 @@ export async function loginUser(payload: { email: string; password: string }) {
 
 export async function fetchCurrentUser(token: string) {
   return apiRequest<ApiUser>('/auth/me', { token })
+}
+
+export async function logoutUser(payload: { accessToken: string; refreshToken?: string | null }) {
+  return apiRequest<void>('/auth/logout', {
+    method: 'POST',
+    token: payload.accessToken,
+    body: payload.refreshToken ? { refresh_token: payload.refreshToken } : undefined
+  })
 }
 
 export function toFrontendAuthUser(user: ApiUser): FrontendAuthUser {

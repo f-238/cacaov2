@@ -5,14 +5,26 @@
         <p class="eyebrow">Live Overview</p>
         <h1>Cacao Drying Dashboard</h1>
         <p class="subtitle">
-          Latest reading from ThingSpeak, with local fallback data if the API is temporarily unavailable.
+          Latest reading from your registered device via backend ingestion.
         </p>
       </div>
 
       <div class="status-pill">
         <span class="status-dot"></span>
-        Last update: {{ formattedLastUpdate }}
+        {{ statusText }}
       </div>
+    </div>
+
+    <div v-if="isLoading" class="empty-state">
+      Loading latest device reading...
+    </div>
+
+    <div v-else-if="noDevice" class="empty-state">
+      No device is registered to your account yet.
+    </div>
+
+    <div v-else-if="loadError" class="empty-state error-state">
+      {{ loadError }}
     </div>
 
     <div class="cards">
@@ -68,23 +80,30 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchLatestSensorSnapshot, type SensorSnapshot } from '../services/thingspeak'
+import { fetchMyDevices } from '../services/devices'
+import { fetchLatestDeviceSnapshot, type SensorSnapshot } from '../services/readings'
 
-const sensorData = ref<SensorSnapshot>({
-  temperature: 30.5,
-  moisture: 12.3,
-  ambientTemp: 27.1,
-  lastUpdate: new Date().toISOString()
+const sensorData = ref<SensorSnapshot | null>(null)
+const isLoading = ref(true)
+const noDevice = ref(false)
+const loadError = ref('')
+
+const statusText = computed(() => {
+  if (isLoading.value) {
+    return 'Loading latest reading...'
+  }
+
+  if (sensorData.value) {
+    return `Last update: ${new Date(sensorData.value.lastUpdate).toLocaleString()}`
+  }
+
+  return 'No readings yet'
 })
-
-const formattedLastUpdate = computed(() =>
-  new Date(sensorData.value.lastUpdate).toLocaleString()
-)
 
 const metrics = computed(() => [
   {
     label: 'Bean Temperature',
-    value: sensorData.value.temperature.toFixed(1),
+    value: sensorData.value ? sensorData.value.temperature.toFixed(1) : '--',
     unit: '°C',
     note: 'Core drying chamber reading',
     icon: 'temperature',
@@ -92,7 +111,7 @@ const metrics = computed(() => [
   },
   {
     label: 'Moisture',
-    value: sensorData.value.moisture.toFixed(1),
+    value: sensorData.value ? sensorData.value.moisture.toFixed(1) : '--',
     unit: '%',
     note: 'Current moisture level estimate',
     icon: 'moisture',
@@ -100,7 +119,7 @@ const metrics = computed(() => [
   },
   {
     label: 'Ambient Temp',
-    value: sensorData.value.ambientTemp.toFixed(1),
+    value: sensorData.value ? sensorData.value.ambientTemp.toFixed(1) : '--',
     unit: '°C',
     note: 'Surrounding air temperature',
     icon: 'ambient',
@@ -108,38 +127,31 @@ const metrics = computed(() => [
   }
 ])
 
-const loadLocalSensorData = () => {
-  const existingData = localStorage.getItem('sensorData')
-
-  if (!existingData) {
-    localStorage.setItem('sensorData', JSON.stringify(sensorData.value))
-    return
-  }
-
+onMounted(async () => {
   try {
-    const parsed = JSON.parse(existingData) as Partial<SensorSnapshot>
+    const devices = await fetchMyDevices()
+    const primaryDevice = devices[0]
 
-    sensorData.value = {
-      temperature: typeof parsed.temperature === 'number' ? parsed.temperature : 30.5,
-      moisture: typeof parsed.moisture === 'number' ? parsed.moisture : 12.3,
-      ambientTemp: typeof parsed.ambientTemp === 'number' ? parsed.ambientTemp : 27.1,
-      lastUpdate:
-        typeof parsed.lastUpdate === 'string' ? parsed.lastUpdate : new Date().toISOString()
+    if (!primaryDevice) {
+      noDevice.value = true
+      return
     }
-  } catch {
-    localStorage.setItem('sensorData', JSON.stringify(sensorData.value))
-  }
-}
 
-onMounted(() => {
-  fetchLatestSensorSnapshot()
-    .then((latest) => {
-      sensorData.value = latest
-      localStorage.setItem('sensorData', JSON.stringify(latest))
-    })
-    .catch(() => {
-      loadLocalSensorData()
-    })
+    try {
+      sensorData.value = await fetchLatestDeviceSnapshot(primaryDevice.id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load latest reading.'
+      if (message === 'No sensor readings found for this device.') {
+        sensorData.value = null
+      } else {
+        loadError.value = message
+      }
+    }
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load dashboard data.'
+  } finally {
+    isLoading.value = false
+  }
 })
 </script>
 
@@ -216,6 +228,20 @@ h2 {
   border-radius: 50%;
   background: #74c6a4;
   box-shadow: 0 0 0 5px rgba(116, 198, 164, 0.16);
+}
+
+.empty-state {
+  max-width: 1120px;
+  margin: 0 auto 20px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px dashed #d9c8d1;
+  color: #526075;
+}
+
+.error-state {
+  color: #b33f5a;
 }
 
 .cards {

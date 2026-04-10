@@ -130,3 +130,29 @@ async def logout_refresh_token(db: AsyncSession, refresh_token: str) -> None:
     refresh_record.revoked = True
     db.add(refresh_record)
     await db.commit()
+
+
+async def logout_user_sessions(
+    db: AsyncSession,
+    user: User,
+    refresh_token: str | None = None,
+) -> None:
+    query = select(RefreshToken).where(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked.is_(False),
+    )
+
+    if refresh_token:
+        query = query.where(RefreshToken.token == refresh_token)
+
+    result = await db.execute(query)
+    refresh_tokens = result.scalars().all()
+
+    if not refresh_tokens:
+        return
+
+    for token in refresh_tokens:
+        token.revoked = True
+        db.add(token)
+
+    await db.commit()

@@ -1,10 +1,30 @@
 <template>
-  <section class="user-shell">
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <p class="eyebrow">User Workspace</p>
-        <h2>Cacao Monitor</h2>
-        <p class="sidebar-copy">View drying progress, sensor history, and device information.</p>
+  <section class="user-shell" :class="{ 'sidebar-collapsed': isSidebarCollapsed }">
+    <aside class="sidebar" :class="{ collapsed: isSidebarCollapsed }">
+      <div class="sidebar-top">
+        <div class="sidebar-brand">
+          <p class="eyebrow">User Workspace</p>
+          <h2>Cacao Monitor</h2>
+          <p class="sidebar-copy">View drying progress, sensor history, and device information.</p>
+        </div>
+        <button
+          class="sidebar-toggle"
+          type="button"
+          :aria-label="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          @click="toggleSidebar"
+        >
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M9.29 6.71 13.58 11l-4.29 4.29 1.42 1.42L16.42 11l-5.71-5.71Z" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar-user">
+        <span class="user-avatar">{{ userInitials }}</span>
+        <div class="user-meta">
+          <span class="user-name">{{ props.currentUserName }}</span>
+          <span class="user-role">Viewer</span>
+        </div>
       </div>
 
       <nav class="sidebar-nav" aria-label="User navigation">
@@ -13,6 +33,8 @@
           :key="item.key"
           class="sidebar-link"
           :class="{ active: activeSection === item.key }"
+          :aria-label="item.label"
+          :title="isSidebarCollapsed ? item.label : undefined"
           @click="activeSection = item.key"
         >
           <span class="nav-icon" aria-hidden="true">
@@ -28,13 +50,31 @@
             <svg v-else-if="item.key === 'Device Info'" viewBox="0 0 24 24" focusable="false">
               <path d="M6 3h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4v2h2v2H8v-2h2v-2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v9h12V5Z" />
             </svg>
+            <svg v-else-if="item.key === 'Settings'" viewBox="0 0 24 24" focusable="false">
+              <path d="M19.14 12.94a7.43 7.43 0 0 0 .05-.94 7.43 7.43 0 0 0-.05-.94l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.48.48 0 0 0-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.63-.94l-.38-2.65A.49.49 0 0 0 13.79 1h-3.58a.49.49 0 0 0-.49.41l-.38 2.65a7.28 7.28 0 0 0-1.63.94l-2.49-1a.48.48 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65a7.43 7.43 0 0 0-.05.94 7.43 7.43 0 0 0 .05.94L2.74 14.6a.5.5 0 0 0-.12.64l2 3.46a.48.48 0 0 0 .6.22l2.49-1a7.28 7.28 0 0 0 1.63.94l.38 2.65a.49.49 0 0 0 .49.41h3.58a.49.49 0 0 0 .49-.41l.38-2.65a7.28 7.28 0 0 0 1.63-.94l2.49 1a.48.48 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64ZM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z" />
+            </svg>
             <svg v-else viewBox="0 0 24 24" focusable="false">
               <path d="M12 2 1 21h22Zm1 15h-2v2h2Zm0-8h-2v6h2Z" />
             </svg>
           </span>
-          <span>{{ item.label }}</span>
+          <span class="nav-label">{{ item.label }}</span>
         </button>
       </nav>
+
+      <button
+        class="sidebar-signout"
+        type="button"
+        aria-label="Sign Out"
+        :title="isSidebarCollapsed ? 'Sign Out' : undefined"
+        @click="emit('sign-out')"
+      >
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M10 17v-2h4V9h-4V7h6v10Zm-4 4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H6v14h7v2Zm11-4-1.41-1.41L18.17 13H9v-2h9.17l-2.58-2.59L17 7l5 5Z" />
+          </svg>
+        </span>
+        <span class="nav-label">Sign Out</span>
+      </button>
     </aside>
 
     <div class="user-content">
@@ -62,6 +102,10 @@
         <DeviceInfo />
       </section>
 
+      <section v-else-if="activeSection === 'Settings'" class="section-stack">
+        <Settings @sign-out="emit('sign-out')" @profile-updated="emit('profile-updated', $event)" />
+      </section>
+
       <section v-else class="section-stack">
         <Alerts />
       </section>
@@ -70,56 +114,123 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import DashboardModern from './DashboardModern.vue'
 import History from './History.vue'
 import Analytics from './Analytics.vue'
 import DeviceInfo from './DeviceInfo.vue'
+import Settings from './Settings.vue'
 import Alerts from './Alerts.vue'
 
-type UserSection = 'Dashboard' | 'History' | 'Analytics' | 'Device Info' | 'Alerts'
+type UserSection = 'Dashboard' | 'History' | 'Analytics' | 'Device Info' | 'Settings' | 'Alerts'
+
+const props = defineProps<{
+  currentUserName: string
+}>()
+
+const emit = defineEmits<{
+  'sign-out': []
+  'profile-updated': [payload: { fullName: string; email: string }]
+}>()
 
 const activeSection = ref<UserSection>('Dashboard')
+const isSidebarCollapsed = ref(false)
 
 const navItems = [
   { key: 'Dashboard' as const, label: 'Dashboard' },
   { key: 'History' as const, label: 'History' },
   { key: 'Analytics' as const, label: 'Analytics' },
   { key: 'Device Info' as const, label: 'Device Info' },
+  { key: 'Settings' as const, label: 'Settings' },
   { key: 'Alerts' as const, label: 'Alerts' }
 ]
 
 const sectionDescriptions: Record<UserSection, string> = {
-  Dashboard: 'Monitor the latest sensor readings from the drying device.',
-  History: 'Review complete ThingSpeak reading history sorted by newest first.',
+  Dashboard: 'Monitor the latest backend-ingested sensor readings from your drying device.',
+  History: 'Review complete device reading history sorted by newest first.',
   Analytics: 'Inspect moisture and temperature trends for drying performance.',
   'Device Info': 'Check the currently connected device status and last seen time.',
+  Settings: 'Customize appearance, profile details, and account session actions.',
   Alerts: 'Read current warnings, notices, and critical sensor notifications.'
+}
+
+const userInitials = computed(() => {
+  const normalized = props.currentUserName.trim()
+  if (!normalized) {
+    return 'U'
+  }
+
+  return normalized
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+})
+
+function toggleSidebar() {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 </script>
 
 <style scoped>
 .user-shell {
-  min-height: calc(100vh - 112px);
+  min-height: 100vh;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 272px minmax(0, 1fr);
   gap: 24px;
-  padding: 24px 20px 32px;
+  padding: 20px;
   background:
     radial-gradient(circle at top left, rgba(255, 231, 237, 0.9), transparent 22%),
     radial-gradient(circle at bottom right, rgba(223, 247, 242, 0.9), transparent 26%),
     #fcfcfd;
 }
 
+.user-shell.sidebar-collapsed {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
 .sidebar {
   position: sticky;
-  top: 128px;
+  top: 20px;
+  max-height: calc(100vh - 40px);
   align-self: start;
-  padding: 24px;
+  padding: 18px;
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid #efe3e7;
   box-shadow: 0 22px 50px rgba(36, 48, 66, 0.08);
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 14px;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #eadfe5;
+  background: #fff;
+  color: #526075;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.sidebar.collapsed .sidebar-toggle svg {
+  transform: rotate(180deg);
 }
 
 .sidebar-brand h2,
@@ -135,6 +246,50 @@ const sectionDescriptions: Record<UserSection, string> = {
   line-height: 1.6;
 }
 
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #efe3e7;
+}
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: #1f2937;
+  background: linear-gradient(135deg, #f3a6ba, #9fd9cc);
+}
+
+.user-meta {
+  min-width: 0;
+  display: grid;
+}
+
+.user-name,
+.user-role {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.user-name {
+  font-weight: 700;
+  color: #243042;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: #5f6d81;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   font-size: 0.78rem;
@@ -145,20 +300,21 @@ const sectionDescriptions: Record<UserSection, string> = {
 }
 
 .sidebar-nav {
-  margin-top: 24px;
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
-.sidebar-link {
+.sidebar-link,
+.sidebar-signout {
   width: 100%;
-  min-height: 52px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid #eadfe5;
-  border-radius: 18px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   color: #526075;
   cursor: pointer;
@@ -166,7 +322,8 @@ const sectionDescriptions: Record<UserSection, string> = {
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.sidebar-link:hover {
+.sidebar-link:hover,
+.sidebar-signout:hover {
   transform: translateY(-1px);
   background: #fff7f9;
   box-shadow: 0 10px 24px rgba(36, 48, 66, 0.08);
@@ -177,6 +334,11 @@ const sectionDescriptions: Record<UserSection, string> = {
   border-color: transparent;
   color: #1f2937;
   font-weight: 700;
+}
+
+.sidebar-signout {
+  color: #b33f5a;
+  background: #fff1f3;
 }
 
 .nav-icon {
@@ -190,6 +352,31 @@ const sectionDescriptions: Record<UserSection, string> = {
   height: 100%;
   fill: currentColor;
   display: block;
+}
+
+.nav-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sidebar.collapsed .sidebar-brand h2,
+.sidebar.collapsed .sidebar-copy,
+.sidebar.collapsed .user-meta,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .eyebrow {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-link,
+.sidebar.collapsed .sidebar-signout {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.collapsed .sidebar-user {
+  justify-content: center;
+  padding: 8px;
 }
 
 .user-content {
@@ -210,12 +397,14 @@ const sectionDescriptions: Record<UserSection, string> = {
 }
 
 @media (max-width: 1080px) {
-  .user-shell {
+  .user-shell,
+  .user-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 
   .sidebar {
     position: static;
+    max-height: none;
   }
 
   .sidebar-nav {
@@ -225,15 +414,74 @@ const sectionDescriptions: Record<UserSection, string> = {
 
 @media (max-width: 720px) {
   .user-shell {
-    padding: 18px 14px 28px;
+    padding: 14px;
   }
 
   .sidebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
     border-radius: 22px;
+    overflow: hidden;
+    position: sticky;
+    top: 8px;
+    z-index: 30;
+    backdrop-filter: blur(12px);
+  }
+
+  .sidebar-top,
+  .sidebar-user {
+    display: none;
   }
 
   .sidebar-nav {
-    grid-template-columns: 1fr;
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+  }
+
+  .sidebar-link {
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    flex: 0 0 auto;
+    border-radius: 12px;
+    justify-content: center;
+  }
+
+  .sidebar-signout {
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    flex: 0 0 auto;
+    justify-content: center;
+    border-radius: 12px;
+  }
+
+  .sidebar-signout .nav-label {
+    display: none;
+  }
+
+  .sidebar-link .nav-label,
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .sidebar-signout .nav-label {
+    display: none;
+  }
+
+  .sidebar.collapsed .sidebar-link {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .sidebar-signout {
+    justify-content: center;
+    padding: 0;
   }
 }
 </style>

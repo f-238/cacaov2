@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_THINGSPEAK_READ_API_KEY: string
-  readonly VITE_THINGSPEAK_CHANNEL_ID: string
+  readonly VITE_API_BASE_URL?: string
 }
 
 interface ImportMeta {

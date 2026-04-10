@@ -9,8 +9,11 @@ venv/
 postgres_data/
 redis_data/
 node_modules/
+.idea/
+*.iml
 .DS_Store
 .venv/
 dist/
 celerybeat-schedule*
 vscode/
+uploads/

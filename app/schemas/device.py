@@ -30,3 +30,14 @@ class DeviceRead(DeviceBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeviceProvisionRead(DeviceRead):
+    ingest_token: str
+
+
+class DeviceIngestTokenRead(BaseModel):
+    device_id: int
+    device_serial: str
+    ingest_token: str
+    issued_at: datetime

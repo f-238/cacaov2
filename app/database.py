@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -45,6 +45,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         await db.close()
 
 
+def get_sync_db() -> Generator[Session, None, None]:
+    db = SyncSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 __all__ = [
     "Base",
     "engine",
@@ -52,4 +60,5 @@ __all__ = [
     "AsyncSessionLocal",
     "SyncSessionLocal",
     "get_db",
+    "get_sync_db",
 ]

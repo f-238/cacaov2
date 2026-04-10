@@ -3,9 +3,9 @@
     <div class="history-header">
       <div>
         <p class="eyebrow">Reading History</p>
-        <h1>All ThingSpeak Past Readings</h1>
+        <h1>All Device Past Readings</h1>
         <p class="subtitle">
-          Complete historical feed sorted by newest date and time first.
+          Complete backend sensor history sorted by newest date and time first.
         </p>
       </div>
 
@@ -16,135 +16,107 @@
     </div>
 
     <div class="table-card">
-      <div class="table-toolbar">
-        <div class="toolbar-copy">
-          <p class="toolbar-note">
-            Filter by date range or export the complete ThingSpeak history as CSV.
-          </p>
+      <div v-if="isLoading" class="empty-state">
+        Loading reading history...
+      </div>
+
+      <div v-else-if="noDevice" class="empty-state">
+        No device is registered to your account yet.
+      </div>
+
+      <div v-else-if="loadError" class="empty-state error-state">
+        {{ loadError }}
+      </div>
+
+      <template v-if="!isLoading && !noDevice && !loadError">
+        <div class="table-toolbar">
+          <div class="toolbar-copy">
+            <p class="toolbar-note">
+              Filter by date range or export the complete device history as CSV.
+            </p>
+          </div>
+
+          <div class="toolbar-controls">
+            <label class="filter-field">
+              <span>From</span>
+              <input v-model="startDate" type="date">
+            </label>
+
+            <label class="filter-field">
+              <span>To</span>
+              <input v-model="endDate" type="date">
+            </label>
+
+            <button class="secondary-button" type="button" @click="clearFilters">
+              Clear
+            </button>
+
+            <button class="export-button" type="button" @click="exportCsv" :disabled="history.length === 0">
+              Export CSV
+            </button>
+          </div>
         </div>
 
-        <div class="toolbar-controls">
-          <label class="filter-field">
-            <span>From</span>
-            <input v-model="startDate" type="date">
-          </label>
-
-          <label class="filter-field">
-            <span>To</span>
-            <input v-model="endDate" type="date">
-          </label>
-
-          <button class="secondary-button" type="button" @click="clearFilters">
-            Clear
-          </button>
-
-          <button class="export-button" type="button" @click="exportCsv" :disabled="history.length === 0">
-            Export CSV
-          </button>
+        <div class="table-scroll">
+          <table v-if="filteredHistory.length > 0">
+            <thead>
+              <tr>
+                <th>Entry ID</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Temperature</th>
+                <th>Ambient Temp</th>
+                <th>Moisture</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="reading in filteredHistory" :key="reading.entryId">
+                <td>{{ reading.entryId }}</td>
+                <td>{{ formatDate(reading.timestamp) }}</td>
+                <td>{{ formatClock(reading.timestamp) }}</td>
+                <td>
+                  <span class="metric-chip chip-temperature">
+                    {{ formatMetric(reading.temperature, '°C') }}
+                  </span>
+                </td>
+                <td>
+                  <span class="metric-chip chip-ambient">
+                    {{ formatMetric(reading.ambientTemp, '°C') }}
+                  </span>
+                </td>
+                <td>
+                  <span class="metric-chip chip-moisture">
+                    {{ formatMetric(reading.moisture, '%') }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </div>
 
-      <div class="table-scroll">
-        <table v-if="filteredHistory.length > 0">
-          <thead>
-            <tr>
-              <th>Entry ID</th>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Temperature</th>
-              <th>Ambient Temp</th>
-              <th>Moisture</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="reading in filteredHistory" :key="reading.entryId">
-              <td>{{ reading.entryId }}</td>
-              <td>{{ formatDate(reading.timestamp) }}</td>
-              <td>{{ formatClock(reading.timestamp) }}</td>
-              <td>
-                <span class="metric-chip chip-temperature">
-                  {{ formatMetric(reading.temperature, '°C') }}
-                </span>
-              </td>
-              <td>
-                <span class="metric-chip chip-ambient">
-                  {{ formatMetric(reading.ambientTemp, '°C') }}
-                </span>
-              </td>
-              <td>
-                <span class="metric-chip chip-moisture">
-                  {{ formatMetric(reading.moisture, '%') }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <div v-if="history.length > 0 && filteredHistory.length === 0" class="empty-state">
+          No readings match the selected date range.
+        </div>
 
-      <div v-if="history.length > 0 && filteredHistory.length === 0" class="empty-state">
-        No readings match the selected date range.
-      </div>
-
-      <div v-if="history.length === 0" class="empty-state">
-        No history data available yet.
-      </div>
+        <div v-if="history.length === 0" class="empty-state">
+          No history data available yet.
+        </div>
+      </template>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchAllHistoricalSensorReadings, type SensorReading } from '../services/thingspeak'
+import { fetchMyDevices } from '../services/devices'
+import { fetchDeviceReadings, type SensorReading } from '../services/readings'
 
 const history = ref<SensorReading[]>([])
 const startDate = ref('')
 const endDate = ref('')
-
-const sampleHistory: SensorReading[] = [
-  {
-    entryId: 1,
-    timestamp: '2026-04-09T08:00:00.000Z',
-    temperature: 29.8,
-    ambientTemp: 27.9,
-    moisture: 13.4
-  },
-  {
-    entryId: 2,
-    timestamp: '2026-04-09T09:30:00.000Z',
-    temperature: 30.6,
-    ambientTemp: 28.4,
-    moisture: 12.8
-  },
-  {
-    entryId: 3,
-    timestamp: '2026-04-09T11:00:00.000Z',
-    temperature: 31.2,
-    ambientTemp: 29.1,
-    moisture: 12.1
-  }
-]
-
-const loadHistoryFallback = () => {
-  const storedHistory = localStorage.getItem('sensorHistory')
-
-  if (!storedHistory) {
-    localStorage.setItem('sensorHistory', JSON.stringify(sampleHistory))
-    history.value = sampleHistory
-    return
-  }
-
-  try {
-    const parsed = JSON.parse(storedHistory) as SensorReading[]
-    history.value = Array.isArray(parsed) ? parsed : sampleHistory
-
-    if (!Array.isArray(parsed)) {
-      localStorage.setItem('sensorHistory', JSON.stringify(sampleHistory))
-    }
-  } catch {
-    localStorage.setItem('sensorHistory', JSON.stringify(sampleHistory))
-    history.value = sampleHistory
-  }
-}
+const isLoading = ref(true)
+const noDevice = ref(false)
+const loadError = ref('')
 
 const filteredHistory = computed(() => {
   const startBoundary = startDate.value ? new Date(`${startDate.value}T00:00:00`) : null
@@ -213,22 +185,29 @@ const exportCsv = () => {
   const downloadUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = downloadUrl
-  link.download = 'thingspeak-history.csv'
+  link.download = 'device-history.csv'
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(downloadUrl)
 }
 
-onMounted(() => {
-  fetchAllHistoricalSensorReadings()
-    .then((readings) => {
-      history.value = readings
-      localStorage.setItem('sensorHistory', JSON.stringify(readings))
-    })
-    .catch(() => {
-      loadHistoryFallback()
-    })
+onMounted(async () => {
+  try {
+    const devices = await fetchMyDevices()
+    const primaryDevice = devices[0]
+
+    if (!primaryDevice) {
+      noDevice.value = true
+      return
+    }
+
+    history.value = await fetchDeviceReadings(primaryDevice.id)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Unable to load reading history.'
+  } finally {
+    isLoading.value = false
+  }
 })
 </script>
 
@@ -442,6 +421,10 @@ tbody tr:hover {
   padding: 28px;
   text-align: center;
   color: #7a8799;
+}
+
+.error-state {
+  color: #b33f5a;
 }
 
 @media (max-width: 720px) {

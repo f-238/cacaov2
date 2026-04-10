@@ -100,6 +100,9 @@ Remove containers and volumes:
 docker compose down -v
 ```
 
+Detailed deployment walkthrough:
+- See [DOCKER_DEPLOYMENT_GUIDE.md](./DOCKER_DEPLOYMENT_GUIDE.md)
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` and adjust values as needed.
@@ -110,8 +113,14 @@ Important variables:
 - `REDIS_URL`
 - `SECRET_KEY`
 - `VITE_API_BASE_URL`
-- `VITE_THINGSPEAK_READ_API_KEY`
-- `VITE_THINGSPEAK_CHANNEL_ID`
+
+## IoT Ingest Flow
+
+1. Login as a user and create a device with `POST /api/devices`.
+2. Save the returned `ingest_token` in the IoT firmware.
+3. Upload readings to `POST /api/iot/readings` with header `X-Device-Token`.
+4. Include `device_serial` in payload; backend verifies it matches the token-bound device.
+5. Dashboard/history/analytics read from `/api/devices/{id}/readings...` endpoints.
 
 ## Seeded Accounts
 
@@ -121,6 +130,19 @@ Important variables:
 - User:
   - email: `user@cacaomonitor.local`
   - password: `user123`
+- User:
+  - email: `operator@cacaomonitor.local`
+  - password: `operator123`
+- User:
+  - email: `qa@cacaomonitor.local`
+  - password: `qauser123`
+
+All seeded users receive default `user_settings` values:
+- `theme_mode`: `system`
+- `font_size`: `medium`
+- `primary_color`: `#1f2937`
+- `secondary_color`: `#526075`
+- `accent_color`: `#f3a6ba`
 
 ## Notes
 

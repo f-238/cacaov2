@@ -40,8 +40,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: supersecretkey
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
-      VITE_THINGSPEAK_READ_API_KEY: ${VITE_THINGSPEAK_READ_API_KEY}
-      VITE_THINGSPEAK_CHANNEL_ID: ${VITE_THINGSPEAK_CHANNEL_ID}
     command: >
       sh -c "alembic upgrade head &&
       python seed.py &&

@@ -19,6 +19,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     role: Mapped[UserRole] = mapped_column(
         SqlEnum(UserRole, name="user_role"),
         default=UserRole.USER,
@@ -45,5 +46,11 @@ class User(Base):
     devices = relationship(
         "Device",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    settings = relationship(
+        "UserSettings",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
     )

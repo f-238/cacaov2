@@ -1,9 +1,12 @@
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.device import Device
 from app.models.user import User
 from app.schemas.device import DeviceCreate, DeviceUpdate
+from app.utils.device_tokens import generate_device_token, hash_device_token
 
 
 def list_devices_for_user(db: Session, user: User) -> list[Device]:
@@ -31,7 +34,7 @@ def get_device_for_user(db: Session, user: User, device_id: int) -> Device:
     return device
 
 
-def create_device(db: Session, user: User, payload: DeviceCreate) -> Device:
+def create_device(db: Session, user: User, payload: DeviceCreate) -> tuple[Device, str]:
     existing_device = (
         db.query(Device)
         .filter(Device.device_serial == payload.device_serial)
@@ -43,6 +46,7 @@ def create_device(db: Session, user: User, payload: DeviceCreate) -> Device:
             detail="Device serial is already registered.",
         )
 
+    ingest_token = generate_device_token()
     device = Device(
         device_name=payload.device_name,
         device_serial=payload.device_serial,
@@ -50,11 +54,13 @@ def create_device(db: Session, user: User, payload: DeviceCreate) -> Device:
         last_seen=payload.last_seen,
         is_online=payload.is_online,
         firmware_version=payload.firmware_version,
+        ingest_token_hash=hash_device_token(ingest_token),
+        ingest_token_created_at=datetime.now(UTC),
     )
     db.add(device)
     db.commit()
     db.refresh(device)
-    return device
+    return device, ingest_token
 
 
 def update_device(db: Session, user: User, device_id: int, payload: DeviceUpdate) -> Device:
@@ -80,6 +86,18 @@ def update_device(db: Session, user: User, device_id: int, payload: DeviceUpdate
     db.commit()
     db.refresh(device)
     return device
+
+
+def rotate_device_ingest_token(db: Session, user: User, device_id: int) -> tuple[Device, str]:
+    device = get_device_for_user(db, user, device_id)
+    ingest_token = generate_device_token()
+    device.ingest_token_hash = hash_device_token(ingest_token)
+    device.ingest_token_created_at = datetime.now(UTC)
+
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    return device, ingest_token
 
 
 def delete_device(db: Session, user: User, device_id: int) -> None:

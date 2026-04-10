@@ -343,6 +343,10 @@ function saveEdit(originalSerial: string) {
     return
   }
 
+  if (!window.confirm('Save device changes?')) {
+    return
+  }
+
   devices.value = devices.value.map((device) =>
     device.serial === originalSerial
       ? {
@@ -362,6 +366,10 @@ function saveEdit(originalSerial: string) {
 }
 
 function rebootDevice(serial: string) {
+  if (!window.confirm(`Reboot device ${serial}?`)) {
+    return
+  }
+
   devices.value = devices.value.map((device) =>
     device.serial === serial
       ? {
@@ -377,6 +385,10 @@ function rebootDevice(serial: string) {
 }
 
 function claimDevice(serial: string) {
+  if (!window.confirm(`Claim device ${serial} for Admin Team?`)) {
+    return
+  }
+
   devices.value = devices.value.map((device) =>
     device.serial === serial
       ? {
@@ -390,6 +402,10 @@ function claimDevice(serial: string) {
 }
 
 function removeDevice(serial: string) {
+  if (!window.confirm(`Remove device ${serial}? This action cannot be undone.`)) {
+    return
+  }
+
   devices.value = devices.value.filter((device) => device.serial !== serial)
   persistDevices()
   syncPrimaryDevice()
